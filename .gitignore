@@ -1,0 +1,20 @@
+# Environnement virtuel Python (chacun recrée le sien avec pip install -r requirements.txt)
+.venv/
+venv/
+
+# Fichiers compilés et caches Python / pytest
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# CSV générés par "python -m pipeline.main generer" (recréés à chaque lancement)
+data/
+
+# Secrets éventuels (mots de passe, clés)
+.env
+
+# Fichiers d'éditeur et du système
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

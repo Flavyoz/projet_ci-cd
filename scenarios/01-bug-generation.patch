@@ -1,0 +1,10 @@
+--- a/pipeline/generate.py
++++ b/pipeline/generate.py
+@@ -69,6 +69,6 @@
+             for tx_id, date, origine, destinataire, montant in lignes:
+                 iban_o, pays_o, banque_o = COMPTES[origine]
+                 iban_d, pays_d, _ = COMPTES[destinataire]
+-                writer.writerow([tx_id, date, iban_o, pays_o, banque_o, iban_d, pays_d, montant])
++                writer.writerow([tx_id, date, iban_o, pays_o, banque_o, iban_d, pays_d, montant.replace(".", ",")])
+         chemins.append(chemin)
+     return chemins

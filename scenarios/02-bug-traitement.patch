@@ -1,0 +1,11 @@
+--- a/pipeline/traitement.py
++++ b/pipeline/traitement.py
+@@ -27,7 +27,7 @@
+ 
+ def est_flaggee(transaction: dict) -> bool:
+     """Flag si le montant est AU-DESSUS de 5000 (5000 pile n'est pas flaggé)."""
+-    return transaction["montant"] > SEUIL_FLAG
++    return transaction["montant"] >= SEUIL_FLAG
+ 
+ 
+ def traiter(transactions: list[dict]) -> dict:

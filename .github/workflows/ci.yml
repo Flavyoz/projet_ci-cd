@@ -1,0 +1,48 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  tests-unitaires:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: pytest tests/test_traitement.py -v
+
+  pipeline:
+    needs: tests-unitaires
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      - name: Lancer le S3 local et PostgreSQL
+        run: docker compose up -d --wait
+
+      - name: Générer les CSV
+        run: python -m pipeline.main generer
+
+      - name: Déposer les CSV dans le S3
+        run: python -m pipeline.main deposer
+
+      - name: Créer les tables
+        run: python -m pipeline.main creer-tables
+
+      - name: Traiter les fichiers (avec 1 panne simulée au téléchargement et 2 à l'insertion)
+        env:
+          FAIL_DOWNLOAD_TIMES: "1"
+          FAIL_INSERT_TIMES: "2"
+        run: python -m pipeline.main traiter
+
+      - name: Relancer le traitement (aucun fichier ne doit être retraité)
+        run: python -m pipeline.main traiter
+
+      - name: Test d'intégration (valeurs en base)
+        run: pytest tests/test_integration.py -v
