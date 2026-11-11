@@ -1,0 +1,9 @@
+.git
+.github
+.venv
+venv
+data
+tests
+scenarios
+__pycache__
+.pytest_cache

@@ -1,0 +1,53 @@
+# Setup de PRODUCTION, déployé par le job "deploiement" de la CI/CD :
+#   docker compose -f docker-compose.prod.yml -p transactions-prod up -d --build --wait
+#
+# Différences avec docker-compose.yml (dev / CI) :
+#   - le script de traitement tourne dans un conteneur et se relance tout seul toutes les INTERVALLE_SECONDES ;
+#   - les données du S3 et de la base sont gardées dans des volumes (elles survivent aux redéploiements) ;
+#   - autres ports sur la machine (15432, 18333) pour pouvoir lancer dev et prod en même temps ;
+#   - redémarrage automatique des conteneurs.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pipeline}
+      POSTGRES_DB: transactions
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports: ["15432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pipeline -d transactions"]
+      interval: 2s
+      retries: 30
+
+  s3:
+    image: chrislusf/seaweedfs:3.80
+    restart: unless-stopped
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    volumes:
+      - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      - s3-data:/data
+    ports: ["18333:8333"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/healthz || exit 1"]
+      interval: 2s
+      retries: 60
+
+  traitement:
+    build: .
+    image: transactions-pipeline:latest
+    restart: unless-stopped
+    init: true   # arrêt propre du conteneur (le script reçoit bien le signal d'arrêt)
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://pipeline:${POSTGRES_PASSWORD:-pipeline}@postgres:5432/transactions
+      S3_ENDPOINT_URL: http://s3:8333
+      INTERVALLE_SECONDES: ${INTERVALLE_SECONDES:-60}
+
+volumes:
+  postgres-data:
+  s3-data:

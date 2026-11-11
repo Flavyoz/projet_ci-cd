@@ -4,7 +4,9 @@
 
 - **Niveau 1** : code terminé. Il manque les captures d'écran de la question 6 (voir « Ce qu'il reste à faire »).
 - **Niveau 2** : code terminé et testé en local. Les CSV passent par un S3 local (SeaweedFS) avant d'être traités.
-- La CI n'a pas encore tourné sur GitHub, seulement en local.
+- **Niveau 3** : CD vers une machine de production (self-hosted runner + Docker), testé en local.
+  Le traitement tourne dans un conteneur et se relance toutes les 60 s.
+- La CI/CD n'a pas encore tourné sur GitHub, seulement en local.
 
 ## Installer et lancer (une seule fois)
 
@@ -47,7 +49,9 @@ docker compose down -v
 | `pipeline/base_de_donnees.py` | écrit les résultats en base |
 | `pipeline/retry.py` | réessaie en cas d'erreur + pannes simulées |
 | `pipeline/main.py` | enchaîne les 4 commandes |
-| `.github/workflows/ci.yml` | la CI GitHub |
+| `.github/workflows/ci.yml` | la CI/CD GitHub (job `deploiement` = niveau 3) |
+| `Dockerfile` | image du script de traitement |
+| `docker-compose.prod.yml` | setup de production (S3 + base + traitement planifié) |
 | `tests/` | tests unitaires et d'intégration |
 | `scenarios/` | bugs à appliquer pour les captures d'écran |
 
@@ -59,4 +63,9 @@ Plus de détails dans le `README.md`.
 2. **Captures d'écran de la CI** :
    - un run vert, en dépliant l'étape « Traiter les fichiers » : on y voit les retries ;
    - un run rouge par bug, avec les patchs du dossier `scenarios/`. Les commandes sont dans le `README.md`.
-3. **Optionnel** : la liste « À ajouter plus tard » à la fin du `README.md` (dashboard, niveau 3…).
+3. **Niveau 3** : installer le self-hosted runner sur la machine de prod (étapes dans le `README.md`,
+   section « Niveau 3 »), pousser sur `main`, puis faire les captures :
+   - le job `deploiement` vert dans *Actions* ;
+   - `docker compose -f docker-compose.prod.yml -p transactions-prod ps` (3 services) ;
+   - les logs du conteneur `traitement` : fichiers traités, puis « déjà traité, ignoré ».
+4. **Optionnel** : la liste « À ajouter plus tard » à la fin du `README.md` (dashboard, niveau 3…).

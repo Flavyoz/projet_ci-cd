@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on: [push, pull_request]
 
@@ -46,3 +46,27 @@ jobs:
 
       - name: Test d'intégration (valeurs en base)
         run: pytest tests/test_integration.py -v
+
+  # CD : si les tests et la pipeline passent sur main, on déploie la production.
+  # Le job tourne sur un "self-hosted runner" : la machine de production elle-même (PC ou VM avec Docker).
+  deploiement:
+    needs: pipeline
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    concurrency: production   # jamais deux déploiements en même temps
+    env:
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construire l'image et (re)démarrer S3, PostgreSQL et le traitement planifié
+        run: docker compose -f docker-compose.prod.yml -p transactions-prod up -d --build --wait --remove-orphans
+
+      - name: Vérifier que le traitement accède à la base
+        run: docker compose -f docker-compose.prod.yml -p transactions-prod exec -T traitement python -m pipeline.main creer-tables
+
+      - name: Etat des services
+        run: docker compose -f docker-compose.prod.yml -p transactions-prod ps
+
+      - name: Derniers logs du traitement
+        run: docker compose -f docker-compose.prod.yml -p transactions-prod logs --tail 30 traitement

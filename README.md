@@ -73,11 +73,51 @@ INFO transactions_2026-10-01.csv : traité (6 transactions)
 Avec `FAIL_INSERT_TIMES=10`, les 5 essais échouent et la pipeline devient rouge. Le fichier n'est pas marqué
 comme traité, il sera donc traité au prochain lancement.
 
-## À ajouter plus tard (hors du strict minimum)
+## Niveau 3 : déploiement continu (CD) en production
 
-- **Niveau 3** : CD qui déploie S3 + base + traitement via Docker sur une VM, avec lancement régulier du traitement.
-- **Niveau 3** : OCR sur des images, SLM sur du texte brut, Terraform/OpenTofu.
-- Dashboard (Grafana ou Metabase) branché sur la base (cité dans l'intro du sujet).
-- Détection d'un même contenu déposé sous un autre nom (checksum).
-- Validation plus stricte des CSV (codes pays, montants négatifs, doublons).
-- Lint (ruff) dans la CI.
+```
+push sur main ─► tests-unitaires ─► pipeline ─► deploiement (self-hosted runner = machine de prod)
+                                                   docker compose -f docker-compose.prod.yml up -d --build
+                                                   ├─ s3          (SeaweedFS, volume s3-data, port 18333)
+                                                   ├─ postgres    (volume postgres-data, port 15432)
+                                                   └─ traitement  (image construite par le Dockerfile,
+                                                                   lance "traiter" toutes les 60 s)
+```
+
+| Fichier | Rôle |
+|---|---|
+| [Dockerfile](Dockerfile) | Image du script de traitement |
+| [docker-compose.prod.yml](docker-compose.prod.yml) | Setup de production : S3, base et traitement planifié, avec volumes et redémarrage automatique |
+| [pipeline/main.py](pipeline/main.py) | Commande `planifier` : crée les tables et le bucket si besoin, puis lance `traiter` en boucle |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Job `deploiement` : seulement sur un push sur `main`, après la CI |
+
+**Lancement régulier.** Le conteneur `traitement` relance le traitement toutes les `INTERVALLE_SECONDES` (60 s
+par défaut). Un fichier déjà traité est ignoré, donc relancer souvent ne coûte rien. Si un passage échoue
+(base ou S3 indisponible), l'erreur est écrite dans les logs et le passage suivant réessaie.
+
+### Installer le runner sur la machine de production (une seule fois)
+
+1. Démarrer Docker Desktop sur la machine (PC ou VM).
+2. Sur GitHub : *Settings → Actions → Runners → New self-hosted runner*, choisir l'OS de la machine.
+3. Lancer les commandes affichées par GitHub (téléchargement, `config.cmd`, puis `run.cmd`).
+   Le runner doit être affiché *Idle* dans la liste.
+4. Optionnel : créer le secret `POSTGRES_PASSWORD` (*Settings → Secrets and variables → Actions*).
+   Sans ce secret, le mot de passe est `pipeline`. Le mot de passe est fixé au premier démarrage de la base :
+   pour le changer ensuite, il faut supprimer le volume (`down -v`).
+5. Sécurité : dans *Settings → Actions → General*, exiger une approbation pour les workflows venant de forks.
+
+### Démo
+
+```bash
+# Déposer des CSV dans le S3 de production (depuis le conteneur, aucun venv nécessaire)
+docker compose -f docker-compose.prod.yml -p transactions-prod exec traitement   sh -c "python -m pipeline.main generer && python -m pipeline.main deposer"
+
+# Voir le traitement planifié les prendre au passage suivant
+docker compose -f docker-compose.prod.yml -p transactions-prod logs -f traitement
+
+# Vérifier les valeurs en base de production
+DATABASE_URL=postgresql://pipeline:pipeline@localhost:15432/transactions pytest tests/test_integration.py
+```
+
+Pour tout arrêter : `docker compose -f docker-compose.prod.yml -p transactions-prod down` (ajouter `-v` pour
+effacer aussi les données).
